@@ -26,7 +26,7 @@ export type ClassConstructor = {
 // could anything from scene objects, THREE.Objects, JSM, user-defined classes and non-scene objects.
 // What they all need to have in common is defined here ...
 export type BaseInstance = Omit<THREE.Object3D, 'parent' | 'children' | 'attach' | 'add' | 'remove' | 'raycast'> & {
-  __r3f: LocalState
+  __r3f?: LocalState
   parent: Instance | null
   children: Instance[]
   attach?: string
@@ -59,7 +59,7 @@ const getContainer = (container: UseStore<RootState> | Instance, child: Instance
   // scene is portalled into. Now there can be two variants of this, either that object is part of
   // the regular jsx tree, in which case it already has __r3f with a valid root attached, or it lies
   // outside react, in which case we must take the root of the child that is about to be attached to it.
-  root: isStore(container) ? container : container.__r3f?.root ?? child.__r3f.root,
+  root: isStore(container) ? container : container.__r3f?.root ?? child.__r3f?.root,
   // The container is the eventual target into which objects are mounted, it has to be a THREE.Object3D
   container: isStore(container) ? (container.getState().scene as unknown as Instance) : container,
 })
@@ -359,7 +359,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
       if (!addedAsChild) {
         // This is for anything that used attach, and for non-Object3Ds that don't get attached to props;
         // that is, anything that's a child in React but not a child in the scenegraph.
-        parentInstance.__r3f.objects.push(child)
+        parentInstance.__r3f?.objects.push(child)
         child.parent = parentInstance
       }
       updateInstance(child)
@@ -387,7 +387,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
       }
 
       if (!added) {
-        parentInstance.__r3f.objects.push(child)
+        parentInstance.__r3f?.objects.push(child)
         child.parent = parentInstance
       }
       updateInstance(child)
@@ -401,7 +401,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
 
   function removeChild(parentInstance: Instance, child: Instance, dispose?: boolean) {
     if (child) {
-      if (parentInstance.__r3f.objects) {
+      if (parentInstance.__r3f?.objects) {
         const oldLength = parentInstance.__r3f.objects.length
         parentInstance.__r3f.objects = parentInstance.__r3f.objects.filter((x) => x !== child)
         const newLength = parentInstance.__r3f.objects.length
@@ -442,7 +442,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
       // Remove nested child objects. Primitives should not have objects and children that are
       // attached to them declaratively ...
       if (!isInstance) {
-        removeRecursive(child.__r3f?.objects, child, shouldDispose)
+        removeRecursive(child.__r3f?.objects ?? [], child, shouldDispose)
         removeRecursive(child.children, child, shouldDispose)
       }
 
@@ -466,7 +466,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
 
   function switchInstance(instance: Instance, type: string, newProps: InstanceProps, fiber: Reconciler.Fiber) {
     const parent = instance.parent
-    if (!parent) return
+    if (!parent || !instance.__r3f) return
 
     const newInstance = createInstance(type, newProps, instance.__r3f.root)
 
@@ -521,7 +521,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
     appendChildToContainer: (parentInstance: UseStore<RootState> | Instance, child: Instance) => {
       const { container, root } = getContainer(parentInstance, child)
       // Link current root to the default scene
-      container.__r3f.root = root
+      if (root && container.__r3f) container.__r3f.root = root
       appendChild(container, child)
     },
     removeChildFromContainer: (parentInstance: UseStore<RootState> | Instance, child: Instance) => {
@@ -544,7 +544,7 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
       newProps: InstanceProps,
       fiber: Reconciler.Fiber,
     ) {
-      if (instance.__r3f.instance && newProps.object && newProps.object !== instance) {
+      if (instance.__r3f?.instance && newProps.object && newProps.object !== instance) {
         // <instance object={...} /> where the object reference has changed
         switchInstance(instance, type, newProps, fiber)
       } else {
@@ -595,12 +595,12 @@ function createRenderer<TCanvas>(roots: Map<TCanvas, Root>) {
     finalizeInitialChildren(instance: Instance) {
       // https://github.com/facebook/react/issues/20271
       // Returning true will trigger commitMount
-      return !!instance.__r3f.handlers
+      return !!instance.__r3f?.handlers
     },
     commitMount(instance: Instance /*, type, props*/) {
       // https://github.com/facebook/react/issues/20271
       // This will make sure events are only added once to the central container
-      if (instance.raycast && instance.__r3f.handlers)
+      if (instance.raycast && instance.__r3f?.handlers)
         instance.__r3f.root.getState().internal.interaction.push(instance as unknown as THREE.Object3D)
     },
     prepareUpdate() {
